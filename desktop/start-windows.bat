@@ -1,16 +1,39 @@
 @echo off
 cd /d "%~dp0"
 
-where python >nul 2>nul
-if errorlevel 1 (
-    echo Python 3 no esta instalado. Descargalo de python.org.
-    pause
-    exit /b 1
+REM whisperX requiere Python 3.10-3.12 (ctranslate2 4.4.0 no tiene wheels para 3.13+).
+set PYEXE=
+for %%v in (python3.12 python3.11 python3.10) do (
+    where %%v >nul 2>nul && set PYEXE=%%v && goto :found
+)
+where py >nul 2>nul && (
+    for %%v in (3.12 3.11 3.10) do (
+        py -%%v -c "" >nul 2>nul && set PYEXE=py -%%v && goto :found
+    )
+)
+where python >nul 2>nul && (
+    for /f "tokens=2 delims=." %%m in ('python -c "import sys;print(sys.version_info.major,sys.version_info.minor)"') do (
+        if %%m GEQ 10 if %%m LEQ 12 set PYEXE=python && goto :found
+    )
 )
 
+echo.
+echo ==========================================
+echo ERROR: necesitas Python 3.10, 3.11 o 3.12.
+echo Tu Python es demasiado nuevo (3.13+) y
+echo whisperX no es compatible aun.
+echo.
+echo Instala Python 3.11 desde:
+echo   https://www.python.org/downloads/release/python-3119/
+echo ==========================================
+pause
+exit /b 1
+
+:found
+echo Usando %PYEXE%
 if not exist venv (
     echo Creando entorno Python (solo la primera vez)...
-    python -m venv venv
+    %PYEXE% -m venv venv
 )
 call venv\Scripts\activate.bat
 

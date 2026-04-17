@@ -12,7 +12,9 @@ Para notas rápidas de una sola voz, la versión online (`https://abp002.github.
 
 ## Requisitos
 
-- **Python 3.10 o superior** instalado (https://www.python.org/downloads/).
+- **Python 3.10, 3.11 o 3.12** (3.13+ NO, whisperX no es compatible todavía).
+  - Mac: `brew install python@3.11`
+  - Windows: https://www.python.org/downloads/release/python-3119/
 - **5 GB de disco libre** (para los modelos + dependencias).
 - Un **token gratuito de Hugging Face** (ver abajo).
 

@@ -305,7 +305,10 @@ function onRecordingStopped() {
 }
 
 function onTranscription(msg) {
-  // msg: { text, isPreview }
+  // msg: { text, isPreview, stats }
+  if (msg.stats) {
+    console.log(`[Whisper->App] ${msg.isPreview ? 'preview' : 'FINAL'} stats:`, msg.stats);
+  }
   if (msg.isPreview) {
     if (msg.text && msg.text.trim()) {
       $('preview-text').textContent = msg.text.trim();
@@ -318,6 +321,7 @@ function onTranscription(msg) {
   } else {
     // Resultado final
     state.finalText = (msg.text || '').trim();
+    state.finalStats = msg.stats || null;
     displayResult();
   }
 }
@@ -327,7 +331,12 @@ function displayResult() {
   const mm = String(Math.floor(state.finalDuration / 60)).padStart(2, '0');
   const ss = String(state.finalDuration % 60).padStart(2, '0');
   const modelLabel = state.currentModel.split('/').pop();
-  $('result-meta').textContent = `${mm}:${ss} · modelo ${modelLabel}`;
+  let meta = `${mm}:${ss} · modelo ${modelLabel}`;
+  if (state.finalStats) {
+    const s = state.finalStats;
+    meta += ` · audio ${s.durSec.toFixed(1)}s · peak ${s.peak.toFixed(2)} · rms ${s.rms.toFixed(3)}`;
+  }
+  $('result-meta').textContent = meta;
   showScreen('result');
 
   // Guardar copia de seguridad

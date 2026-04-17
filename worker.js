@@ -85,12 +85,9 @@ async function loadModel(model) {
 }
 
 async function detectDevice() {
-  try {
-    if ('gpu' in navigator) {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (adapter) return 'webgpu';
-    }
-  } catch {}
+  // Temporalmente forzamos WASM/CPU. En algunos Macs con Chrome/WebGPU
+  // Whisper devuelve tokens basura por mezcla de ops GPU/CPU en ONNX.
+  // Más lento (3-10x) pero confiable.
   return 'wasm';
 }
 
@@ -139,6 +136,7 @@ async function processQueue() {
       type: 'transcription',
       text,
       isPreview: !!job.isPreview,
+      stats: { samples: audio.length, durSec: Number(durSec), peak: max, rms },
     });
   } catch (err) {
     console.error('Error de transcripción:', err);

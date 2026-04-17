@@ -1,0 +1,27 @@
+{
+  "name": "Voz · Transcriptor en español",
+  "short_name": "Voz",
+  "description": "Transcribe reuniones en español directamente en tu navegador. Privado, offline, sin coste.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f0e8",
+  "theme_color": "#1c2620",
+  "lang": "es",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

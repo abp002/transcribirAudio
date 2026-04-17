@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1c2620" />
+  <title>Voz · Transcriptor en español</title>
+  <meta name="description" content="Transcribe reuniones en español directamente en tu navegador. Privado, offline, sin coste." />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Geist:wght@300..700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg: #f5f0e8;
+      --bg-raised: #ffffff;
+      --ink: #1c2620;
+      --ink-soft: #4a5652;
+      --ink-muted: #8a938f;
+      --line: #e4ddd1;
+      --accent: #c14d2b;
+      --accent-soft: #f5e3da;
+      --success: #2d7a4f;
+      --warn: #b8860b;
+      --shadow: 0 1px 2px rgba(28, 38, 32, 0.04), 0 8px 24px rgba(28, 38, 32, 0.06);
+      --radius: 14px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #15191a;
+        --bg-raised: #1f2426;
+        --ink: #f0ebe2;
+        --ink-soft: #b8b3a8;
+        --ink-muted: #6f736e;
+        --line: #2d3336;
+        --accent: #e86a3f;
+        --accent-soft: #3a2419;
+        --shadow: 0 1px 2px rgba(0,0,0,0.2), 0 8px 24px rgba(0,0,0,0.3);
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Geist', -apple-system, system-ui, sans-serif;
+      font-size: 17px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    body {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ===== Header ===== */
+    header {
+      padding: 24px 28px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    .logo {
+      font-family: 'Fraunces', serif;
+      font-variation-settings: 'opsz' 144;
+      font-weight: 500;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .logo em {
+      font-style: italic;
+      color: var(--accent);
+      font-weight: 400;
+    }
+
+    .tagline {
+      font-size: 13px;
+      color: var(--ink-muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ===== Main area ===== */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 32px 24px;
+      text-align: center;
+    }
+
+    .screen {
+      display: none;
+      width: 100%;
+      max-width: 720px;
+      animation: fadeIn 0.4s ease;
+    }
+
+    .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== Loading screen ===== */
+    #screen-loading h2 {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: clamp(28px, 5vw, 42px);
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+
+    #screen-loading p {
+      color: var(--ink-soft);
+      max-width: 460px;
+      margin-bottom: 32px;
+    }
+
+    .progress-wrap {
+      width: 100%;
+      max-width: 420px;
+      height: 6px;
+      background: var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-label {
+      font-size: 13px;
+      color: var(--ink-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ===== Idle screen ===== */
+    #screen-idle h1 {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: clamp(36px, 7vw, 64px);
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      margin-bottom: 16px;
+      max-width: 600px;
+    }
+
+    #screen-idle h1 em {
+      font-style: italic;
+      color: var(--accent);
+    }
+
+    #screen-idle .subtitle {
+      color: var(--ink-soft);
+      font-size: 17px;
+      max-width: 460px;
+      margin-bottom: 48px;
+    }
+
+    .btn-record {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: var(--shadow), 0 0 0 0 var(--accent-soft);
+      transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .btn-record:hover {
+      transform: scale(1.04);
+      box-shadow: var(--shadow), 0 0 0 12px var(--accent-soft);
+    }
+
+    .btn-record:active { transform: scale(0.98); }
+
+    .btn-record:disabled {
+      background: var(--ink-muted);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-record svg { width: 40px; height: 40px; }
+
+    .btn-record-label {
+      margin-top: 20px;
+      font-size: 15px;
+      color: var(--ink-soft);
+    }
+
+    .btn-record-label kbd {
+      font-family: inherit;
+      background: var(--bg-raised);
+      border: 1px solid var(--line);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    /* ===== Recording screen ===== */
+    #screen-recording {
+      width: 100%;
+      max-width: 820px;
+    }
+
+    .rec-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .rec-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    .rec-time {
+      font-family: 'Geist', monospace;
+      font-variant-numeric: tabular-nums;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+
+    .rec-status {
+      font-size: 13px;
+      color: var(--ink-muted);
+      margin-bottom: 24px;
+    }
+
+    .waveform {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      height: 60px;
+      margin-bottom: 28px;
+    }
+
+    .waveform span {
+      display: block;
+      width: 3px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: height 0.08s ease;
+    }
+
+    .preview-box {
+      width: 100%;
+      min-height: 200px;
+      max-height: 40vh;
+      background: var(--bg-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      text-align: left;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .preview-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--ink-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .preview-label .dot-working {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--warn);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .preview-text {
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ink-soft);
+      font-style: italic;
+    }
+
+    .preview-text.empty {
+      color: var(--ink-muted);
+      font-style: italic;
+    }
+
+    .btn-stop {
+      border: none;
+      background: var(--ink);
+      color: var(--bg);
+      padding: 16px 40px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: var(--shadow);
+    }
+
+    .btn-stop:hover { transform: translateY(-1px); }
+    .btn-stop svg { width: 18px; height: 18px; }
+
+    /* ===== Processing screen ===== */
+    #screen-processing h2 {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: clamp(28px, 5vw, 40px);
+      margin-bottom: 16px;
+    }
+
+    #screen-processing p {
+      color: var(--ink-soft);
+      margin-bottom: 32px;
+    }
+
+    .spinner {
+      width: 54px;
+      height: 54px;
+      border: 3px solid var(--line);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== Result screen ===== */
+    #screen-result {
+      width: 100%;
+      max-width: 820px;
+    }
+
+    .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 16px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .result-title {
+      font-family: 'Fraunces', serif;
+      font-weight: 400;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+
+    .result-meta {
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    .result-text {
+      background: var(--bg-raised);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 32px;
+      min-height: 280px;
+      max-height: 60vh;
+      overflow-y: auto;
+      text-align: left;
+      font-size: 17px;
+      line-height: 1.75;
+      color: var(--ink);
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: var(--bg-raised);
+      color: var(--ink);
+      padding: 12px 20px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+    .btn svg { width: 16px; height: 16px; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .btn-primary:hover { background: var(--ink); border-color: var(--ink); }
+
+    /* ===== Footer ===== */
+    footer {
+      padding: 20px 28px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--ink-muted);
+      flex-wrap: wrap;
+    }
+
+    .model-selector {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .model-selector label { color: var(--ink-soft); }
+
+    select {
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--bg-raised);
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .footer-info { color: var(--ink-muted); }
+    .footer-info b { color: var(--ink-soft); font-weight: 500; }
+
+    /* ===== Toast ===== */
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--ink);
+      color: var(--bg);
+      padding: 12px 20px;
+      border-radius: 999px;
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow);
+      z-index: 100;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* ===== Error ===== */
+    .error-banner {
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      color: var(--ink);
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      font-size: 14px;
+      text-align: left;
+      display: none;
+    }
+    .error-banner.show { display: block; }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 600px) {
+      header { padding: 20px 20px 0; }
+      .logo { font-size: 24px; }
+      main { padding: 24px 16px; }
+      footer { padding: 16px 20px; flex-direction: column; align-items: flex-start; gap: 10px; }
+      .result-text { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">Voz<em>.</em></div>
+    <div class="tagline">Transcripción privada · Español</div>
+  </header>
+
+  <main>
+    <!-- LOADING MODEL -->
+    <section id="screen-loading" class="screen active">
+      <h2 id="loading-title">Preparando el motor de transcripción</h2>
+      <p id="loading-subtitle">Solo la primera vez. Se descarga el modelo de IA (~500 MB) y se guarda en tu navegador. Después funciona sin conexión.</p>
+      <div class="progress-wrap"><div id="progress-bar" class="progress-bar"></div></div>
+      <div id="progress-label" class="progress-label">Iniciando…</div>
+    </section>
+
+    <!-- IDLE / READY -->
+    <section id="screen-idle" class="screen">
+      <div id="error-banner" class="error-banner"></div>
+      <h1>Pulsa grabar y <em>empieza a hablar</em></h1>
+      <p class="subtitle">Tu voz nunca sale de este dispositivo. Todo se procesa localmente en tu navegador.</p>
+      <button id="btn-record" class="btn-record" aria-label="Empezar a grabar">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11h-2z"/></svg>
+      </button>
+      <div class="btn-record-label">Pulsa el botón o la tecla <kbd>Espacio</kbd></div>
+    </section>
+
+    <!-- RECORDING -->
+    <section id="screen-recording" class="screen">
+      <div class="rec-header">
+        <span class="rec-dot"></span>
+        <span id="rec-time" class="rec-time">00:00</span>
+      </div>
+      <div class="rec-status">Grabando · el audio no sale de tu equipo</div>
+
+      <div id="waveform" class="waveform" aria-hidden="true"></div>
+
+      <div class="preview-box">
+        <div class="preview-label">
+          Vista previa
+          <span id="preview-working" class="dot-working" style="display:none"></span>
+          <span id="preview-working-text" style="display:none">transcribiendo…</span>
+        </div>
+        <div id="preview-text" class="preview-text empty">Empieza a hablar. La vista previa aparecerá en unos segundos…</div>
+      </div>
+
+      <button id="btn-stop" class="btn-stop">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        Parar y transcribir
+      </button>
+    </section>
+
+    <!-- PROCESSING -->
+    <section id="screen-processing" class="screen">
+      <div class="spinner"></div>
+      <h2>Transcribiendo…</h2>
+      <p id="processing-detail">Esto puede tardar 1–3 minutos según la duración.</p>
+    </section>
+
+    <!-- RESULT -->
+    <section id="screen-result" class="screen">
+      <div class="result-header">
+        <div class="result-title">Transcripción lista</div>
+        <div id="result-meta" class="result-meta">—</div>
+      </div>
+      <div id="result-text" class="result-text"></div>
+      <div class="result-actions">
+        <button id="btn-copy" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 012-2h10"/></svg>
+          Copiar
+        </button>
+        <button id="btn-download" class="btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          Descargar .txt
+        </button>
+        <button id="btn-new" class="btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v4m0 0l3-3m-3 3L9 5M4 12a8 8 0 1016 0 8 8 0 00-16 0z"/></svg>
+          Nueva grabación
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="model-selector">
+      <label for="model-select">Calidad:</label>
+      <select id="model-select">
+        <option value="Xenova/whisper-base">Rápido (base · 150 MB)</option>
+        <option value="Xenova/whisper-small" selected>Equilibrado (small · 500 MB)</option>
+        <option value="Xenova/whisper-medium">Máxima (medium · 1.5 GB)</option>
+      </select>
+    </div>
+    <div class="footer-info">
+      <b>100% privado</b> · Nada se envía a ningún servidor
+    </div>
+  </footer>
+
+  <div id="toast" class="toast">Copiado</div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

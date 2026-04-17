@@ -3,7 +3,7 @@
 // El modelo Whisper se cachea automáticamente por Transformers.js
 // =============================================================
 
-const CACHE_NAME = 'voz-v1';
+const CACHE_NAME = 'voz-v2';
 const SHELL = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   './worker.js',
   './manifest.json',
   './icon.svg',
+  './logo.png',
 ];
 
 self.addEventListener('install', (event) => {

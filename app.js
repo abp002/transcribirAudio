@@ -184,6 +184,8 @@ async function startRecording() {
   state.analyser.fftSize = 64;
   source.connect(state.analyser);
 
+  console.log(`[App] AudioContext sampleRate real: ${state.audioContext.sampleRate} Hz`);
+
   state.pcmChunks = [];
   state.workletNode = new AudioWorkletNode(state.audioContext, 'pcm-recorder');
   state.workletNode.port.onmessage = (e) => {

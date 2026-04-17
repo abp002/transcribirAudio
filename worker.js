@@ -112,6 +112,17 @@ async function processQueue() {
   try {
     const audio = new Float32Array(job.audio);
 
+    // --- Diagnóstico de audio (ayuda a saber si el problema es el audio o Whisper) ---
+    let max = 0, sumSq = 0;
+    for (let i = 0; i < audio.length; i++) {
+      const v = Math.abs(audio[i]);
+      if (v > max) max = v;
+      sumSq += audio[i] * audio[i];
+    }
+    const rms = Math.sqrt(sumSq / audio.length);
+    const durSec = (audio.length / 16000).toFixed(2);
+    console.log(`[Whisper] ${job.isPreview ? 'preview' : 'FINAL'} | ${audio.length} samples (${durSec}s@16k) | peak=${max.toFixed(3)} | rms=${rms.toFixed(4)}`);
+
     const options = {
       language: 'spanish',
       task: 'transcribe',
@@ -122,6 +133,7 @@ async function processQueue() {
 
     const output = await transcriber(audio, options);
     const text = Array.isArray(output) ? output.map(o => o.text).join(' ') : (output.text || '');
+    console.log(`[Whisper] ${job.isPreview ? 'preview' : 'FINAL'} output:`, JSON.stringify(text));
 
     self.postMessage({
       type: 'transcription',

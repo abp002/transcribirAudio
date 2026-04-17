@@ -293,7 +293,7 @@ async function onRecordingStopped() {
   }
 
   showScreen('processing');
-  $('processing-detail').textContent = estimatedTimeText(state.finalDuration);
+  $('processing-detail').textContent = 'Esto puede tardar un rato. Déjalo que termine.';
 
   try {
     const audioData = await blobChunksToFloat32(state.audioChunks);
@@ -312,17 +312,6 @@ async function onRecordingStopped() {
     showError('No se pudo procesar el audio grabado.');
     showScreen('idle');
   }
-}
-
-function estimatedTimeText(durationSecs) {
-  // Estimación muy aproximada según modelo
-  const factor = state.currentModel.includes('medium') ? 0.25
-               : state.currentModel.includes('small') ? 0.12
-               : 0.07;
-  const estSecs = Math.max(10, Math.round(durationSecs * factor));
-  if (estSecs < 60) return `Esto puede tardar unos ${estSecs} segundos.`;
-  const mins = Math.round(estSecs / 60);
-  return `Esto puede tardar alrededor de ${mins} ${mins === 1 ? 'minuto' : 'minutos'}.`;
 }
 
 function onTranscription(msg) {

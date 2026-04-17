@@ -86,9 +86,19 @@ function loadModel(model) {
   state.modelReady = false;
   state.currentModel = model;
   showScreen('loading');
-  $('loading-title').textContent = 'Preparando el motor de transcripción';
+
+  const alreadyLoaded = localStorage.getItem(`voz.loaded.${model}`) === '1';
+  if (alreadyLoaded) {
+    $('loading-title').textContent = 'Cargando el motor';
+    $('loading-subtitle').textContent = 'Tu modelo ya está guardado en este navegador. Solo lo pasamos a memoria (15-30 s).';
+    $('progress-label').textContent = 'Leyendo caché local…';
+  } else {
+    $('loading-title').textContent = 'Preparando el motor de transcripción';
+    $('loading-subtitle').textContent = 'Solo la primera vez. Se descarga el modelo de IA y se guarda en tu navegador. Después funciona sin conexión.';
+    $('progress-label').textContent = 'Comprobando caché…';
+  }
+
   $('progress-bar').style.width = '0%';
-  $('progress-label').textContent = 'Iniciando…';
   $('model-select').disabled = true;
 
   state.worker.postMessage({ type: 'load', model });
@@ -98,8 +108,11 @@ function onModelProgress(msg) {
   // msg: { status, file, progress, loaded, total }
   const { status, file, progress, loaded, total } = msg;
 
-  if (status === 'initiate' || status === 'download') {
-    $('progress-label').textContent = `Descargando ${file || 'modelo'}…`;
+  if (status === 'initiate') {
+    // Aún no sabemos si es cache-hit (rápido) o descarga real.
+    // No pisamos el label para no contradecir "Leyendo caché…" en la 2ª visita.
+  } else if (status === 'download') {
+    $('progress-label').textContent = `Descargando ${file || 'modelo'} desde la nube…`;
   } else if (status === 'progress') {
     if (typeof progress === 'number') {
       $('progress-bar').style.width = `${Math.min(100, progress)}%`;
@@ -107,10 +120,8 @@ function onModelProgress(msg) {
     if (loaded && total) {
       const mb = (loaded / 1024 / 1024).toFixed(1);
       const totalMb = (total / 1024 / 1024).toFixed(1);
-      $('progress-label').textContent = `Descargando… ${mb} MB / ${totalMb} MB`;
+      $('progress-label').textContent = `Descargando ${mb} MB / ${totalMb} MB`;
     }
-  } else if (status === 'done') {
-    $('progress-label').textContent = `Listo: ${file || ''}`;
   } else if (status === 'loading') {
     $('progress-bar').style.width = '100%';
     $('progress-label').textContent = 'Cargando modelo en memoria…';
@@ -119,6 +130,7 @@ function onModelProgress(msg) {
 
 function onModelReady() {
   state.modelReady = true;
+  localStorage.setItem(`voz.loaded.${state.currentModel}`, '1');
   $('model-select').disabled = false;
   showScreen('idle');
 }

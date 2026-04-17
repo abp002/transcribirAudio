@@ -92,33 +92,6 @@
       .brand img { filter: invert(1) hue-rotate(180deg) brightness(0.95); }
     }
 
-    .brand .sep {
-      width: 1px;
-      height: 26px;
-      background: var(--line);
-    }
-
-    .app-name {
-      font-family: 'Fraunces', serif;
-      font-variation-settings: 'opsz' 144;
-      font-weight: 500;
-      font-size: 22px;
-      letter-spacing: -0.01em;
-      color: var(--ink);
-    }
-
-    .app-name em {
-      font-style: italic;
-      color: var(--accent);
-      font-weight: 400;
-    }
-
-    .tagline {
-      font-size: 13px;
-      color: var(--ink-muted);
-      letter-spacing: 0.02em;
-    }
-
     /* ===== Main area ===== */
     main {
       flex: 1;
@@ -190,20 +163,13 @@
       font-size: clamp(36px, 7vw, 64px);
       letter-spacing: -0.03em;
       line-height: 1.05;
-      margin-bottom: 16px;
+      margin-bottom: 48px;
       max-width: 600px;
     }
 
     #screen-idle h1 em {
       font-style: italic;
       color: var(--accent);
-    }
-
-    #screen-idle .subtitle {
-      color: var(--ink-soft);
-      font-size: 17px;
-      max-width: 460px;
-      margin-bottom: 48px;
     }
 
     .btn-record {
@@ -515,9 +481,6 @@
 
     select:disabled { opacity: 0.5; cursor: not-allowed; }
 
-    .footer-info { color: var(--ink-muted); }
-    .footer-info b { color: var(--ink-soft); font-weight: 500; }
-
     /* ===== Toast ===== */
     .toast {
       position: fixed;
@@ -558,7 +521,7 @@
     /* ===== Responsive ===== */
     @media (max-width: 600px) {
       header { padding: 20px 20px 0; }
-      .logo { font-size: 24px; }
+      .brand img { height: 36px; }
       main { padding: 24px 16px; }
       footer { padding: 16px 20px; flex-direction: column; align-items: flex-start; gap: 10px; }
       .result-text { padding: 20px; }
@@ -570,10 +533,7 @@
   <header>
     <div class="brand">
       <img src="./logo.png" alt="Win Innovación" />
-      <span class="sep"></span>
-      <span class="app-name">Voz<em>.</em></span>
     </div>
-    <div class="tagline">Transcripción privada · Español</div>
   </header>
 
   <main>
@@ -589,7 +549,6 @@
     <section id="screen-idle" class="screen">
       <div id="error-banner" class="error-banner"></div>
       <h1>Pulsa grabar y <em>empieza a hablar</em></h1>
-      <p class="subtitle">Tu voz nunca sale de este dispositivo. Todo se procesa localmente en tu navegador.</p>
       <button id="btn-record" class="btn-record" aria-label="Empezar a grabar">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11h-2z"/></svg>
       </button>
@@ -660,9 +619,6 @@
         <option value="Xenova/whisper-small" selected>Equilibrado (small · 500 MB)</option>
         <option value="Xenova/whisper-medium">Máxima (medium · 1.5 GB)</option>
       </select>
-    </div>
-    <div class="footer-info">
-      <b>100% privado</b> · Nada se envía a ningún servidor
     </div>
   </footer>
 

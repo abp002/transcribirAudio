@@ -6,6 +6,7 @@
 // ---- Estado global ----
 const state = {
   worker: null,
+  backend: null,
   modelReady: false,
   currentModel: null,
   selectedModel: localStorage.getItem('voz.model') || 'Xenova/whisper-small',
@@ -21,6 +22,8 @@ const state = {
   previewBusy: false,
   lastPreviewText: '',
   finalText: '',
+  finalSegments: null,
+  finalStats: null,
   finalDuration: 0,
 };
 
@@ -56,30 +59,53 @@ function showToast(text) {
 }
 
 // =============================================================
-// Worker (carga del modelo Whisper)
+// Detección de backend local (whisperX + pyannote)
 // =============================================================
-function initWorker() {
-  state.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+async function detectBackend() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const r = await fetch('/api/health', { signal: ctrl.signal });
+    clearTimeout(t);
+    if (r.ok) return await r.json();
+  } catch {}
+  return null;
+}
 
+// =============================================================
+// Worker (modelo Whisper en navegador) o backend local
+// =============================================================
+async function initWorker() {
+  state.backend = await detectBackend();
+  if (state.backend) {
+    console.log('[App] Backend local detectado:', state.backend);
+    state.modelReady = true;
+    $('model-select').style.display = 'none';
+    showBackendBadge(state.backend);
+    showScreen('idle');
+    return;
+  }
+
+  // Fallback: Whisper in-browser via Web Worker
+  state.worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
   state.worker.onmessage = (e) => {
     const msg = e.data;
     switch (msg.type) {
-      case 'progress':
-        onModelProgress(msg);
-        break;
-      case 'ready':
-        onModelReady();
-        break;
-      case 'transcription':
-        onTranscription(msg);
-        break;
-      case 'error':
-        onWorkerError(msg);
-        break;
+      case 'progress': onModelProgress(msg); break;
+      case 'ready': onModelReady(); break;
+      case 'transcription': onTranscription(msg); break;
+      case 'error': onWorkerError(msg); break;
     }
   };
-
   loadModel(state.selectedModel);
+}
+
+function showBackendBadge(info) {
+  const el = document.getElementById('backend-badge');
+  if (!el) return;
+  const diar = info.diarization ? ' con diarización' : '';
+  el.textContent = `Modo local (${info.device}/${info.model})${diar}`;
+  el.style.display = 'inline-block';
 }
 
 function loadModel(model) {
@@ -292,16 +318,70 @@ function onRecordingStopped() {
       showScreen('idle');
       return;
     }
-    state.worker.postMessage({
-      type: 'transcribe',
-      audio: audioData,
-      isPreview: false,
-    }, [audioData.buffer]);
+    if (state.backend) {
+      transcribeWithBackend(audioData);
+    } else {
+      state.worker.postMessage({
+        type: 'transcribe',
+        audio: audioData,
+        isPreview: false,
+      }, [audioData.buffer]);
+    }
   } catch (err) {
     console.error('PCM build error:', err);
     showError('No se pudo procesar el audio grabado.');
     showScreen('idle');
   }
+}
+
+async function transcribeWithBackend(pcm) {
+  const wav = pcmToWav(pcm, 16000);
+  const fd = new FormData();
+  fd.append('audio', new Blob([wav], { type: 'audio/wav' }), 'recording.wav');
+  try {
+    const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    state.finalSegments = data.segments || [];
+    state.finalText = state.finalSegments
+      .map(s => `[${s.speaker}]\n${s.text}`)
+      .join('\n\n');
+    state.finalStats = null;
+    displayResult();
+  } catch (err) {
+    console.error('Backend error:', err);
+    showError(`Fallo en el servidor local: ${err.message}`);
+    showScreen('idle');
+  }
+}
+
+// Float32 mono PCM → WAV 16-bit little-endian (ArrayBuffer)
+function pcmToWav(pcm, sampleRate) {
+  const bytesPerSample = 2;
+  const dataSize = pcm.length * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const v = new DataView(buffer);
+  const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  writeStr(0, 'RIFF');
+  v.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  v.setUint32(16, 16, true);       // PCM chunk size
+  v.setUint16(20, 1, true);        // PCM format
+  v.setUint16(22, 1, true);        // mono
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * bytesPerSample, true);
+  v.setUint16(32, bytesPerSample, true);
+  v.setUint16(34, 16, true);       // bits per sample
+  writeStr(36, 'data');
+  v.setUint32(40, dataSize, true);
+  let off = 44;
+  for (let i = 0; i < pcm.length; i++) {
+    const s = Math.max(-1, Math.min(1, pcm[i]));
+    v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    off += 2;
+  }
+  return buffer;
 }
 
 function onTranscription(msg) {
@@ -327,10 +407,41 @@ function onTranscription(msg) {
 }
 
 function displayResult() {
-  $('result-text').textContent = state.finalText || '(Sin texto transcrito)';
+  const box = $('result-text');
+  box.innerHTML = '';
+  if (state.finalSegments && state.finalSegments.length > 0) {
+    const palette = ['#01896c', '#c14d2b', '#2d6fa6', '#8b4a9c', '#b87333', '#4a8a5a', '#a83e6f', '#5a6c7a'];
+    const speakerMap = new Map();
+    state.finalSegments.forEach(seg => {
+      if (!speakerMap.has(seg.speaker)) {
+        speakerMap.set(seg.speaker, {
+          name: `Hablante ${speakerMap.size + 1}`,
+          color: palette[speakerMap.size % palette.length],
+        });
+      }
+      const info = speakerMap.get(seg.speaker);
+      const block = document.createElement('div');
+      block.className = 'segment';
+      const label = document.createElement('div');
+      label.className = 'segment-speaker';
+      label.textContent = info.name;
+      label.style.color = info.color;
+      const text = document.createElement('div');
+      text.className = 'segment-text';
+      text.textContent = seg.text;
+      block.appendChild(label);
+      block.appendChild(text);
+      box.appendChild(block);
+    });
+  } else {
+    box.textContent = state.finalText || '(Sin texto transcrito)';
+  }
+
   const mm = String(Math.floor(state.finalDuration / 60)).padStart(2, '0');
   const ss = String(state.finalDuration % 60).padStart(2, '0');
-  const modelLabel = state.currentModel.split('/').pop();
+  const modelLabel = state.backend
+    ? `${state.backend.model} (local)`
+    : state.currentModel.split('/').pop();
   let meta = `${mm}:${ss} · modelo ${modelLabel}`;
   if (state.finalStats) {
     const s = state.finalStats;

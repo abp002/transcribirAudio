@@ -88,6 +88,18 @@
       display: block;
     }
 
+    .backend-badge {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      white-space: nowrap;
+    }
+
     @media (prefers-color-scheme: dark) {
       .brand img { filter: invert(1) hue-rotate(180deg) brightness(0.95); }
     }
@@ -415,6 +427,18 @@
       word-wrap: break-word;
     }
 
+    .segment { margin-bottom: 18px; white-space: normal; }
+    .segment:last-child { margin-bottom: 0; }
+    .segment-speaker {
+      font-family: 'Fraunces', serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .segment-text { color: var(--ink); }
+
     .result-actions {
       display: flex;
       gap: 12px;
@@ -551,6 +575,7 @@
   <header>
     <div class="brand">
       <img src="./logo.png" alt="Win Innovación" />
+      <span id="backend-badge" class="backend-badge" style="display:none"></span>
     </div>
   </header>
 

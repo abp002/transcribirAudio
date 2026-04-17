@@ -26,6 +26,15 @@ Notas:
 - CF Access manda un magic-link al email para autenticar. Tier gratuito hasta 50 usuarios.
 - Si se migra el dominio, actualizar la URL en cualquier mensaje/README.
 
+### Desktop (whisperX + pyannote) — backend local con diarización
+
+Añadido en `desktop/`:
+- `server.py` — FastAPI que sirve la PWA estática + expone `/api/health` y `/api/transcribe` (acepta WAV, devuelve segmentos agrupados por hablante).
+- `start-mac.command` / `start-windows.bat` — scripts de doble-clic que crean venv, instalan deps y arrancan el servidor en `http://localhost:7860`.
+- Requiere Python 3.10+, ~5 GB disco y un HF token (licencias de pyannote).
+
+Pendiente (fase 2): empaquetar como .dmg/.exe con Electron/Tauri + pyinstaller para un único doble-clic sin setup Python.
+
 ### 2. Bug de transcripción: "(", "Y" o "<<<<<<<" en la salida
 
 Síntoma: la vista previa y/o la transcripción final devuelven muy poco texto (un carácter) o cadenas repetidas de `<`. Pasa especialmente en móvil.

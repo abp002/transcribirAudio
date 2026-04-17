@@ -10,8 +10,8 @@ const state = {
   currentModel: null,
   selectedModel: localStorage.getItem('voz.model') || 'Xenova/whisper-small',
   mediaStream: null,
-  mediaRecorder: null,
-  audioChunks: [],
+  workletNode: null,
+  pcmChunks: [],
   audioContext: null,
   analyser: null,
   startTime: 0,
@@ -142,7 +142,7 @@ function onWorkerError(msg) {
 }
 
 // =============================================================
-// Grabación
+// Grabación (captura PCM directo con AudioWorklet)
 // =============================================================
 async function startRecording() {
   if (!state.modelReady) return;
@@ -162,26 +162,34 @@ async function startRecording() {
     return;
   }
 
-  // Audio context para analyser (ondas) y para decodificar luego
-  state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  // AudioContext forzado a 16 kHz mono para que Whisper reciba exactamente
+  // lo que espera sin tener que resamplear en JS.
+  try {
+    state.audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+  } catch {
+    state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  try {
+    await state.audioContext.audioWorklet.addModule('./pcm-recorder.js');
+  } catch (err) {
+    console.error('AudioWorklet load failed:', err);
+    showError('Tu navegador no soporta la captura de audio necesaria. Usa Chrome o Edge actualizados.');
+    state.mediaStream.getTracks().forEach(t => t.stop());
+    return;
+  }
+
   const source = state.audioContext.createMediaStreamSource(state.mediaStream);
   state.analyser = state.audioContext.createAnalyser();
   state.analyser.fftSize = 64;
   source.connect(state.analyser);
 
-  // MediaRecorder captura en chunks
-  const mime = pickMime();
-  state.audioChunks = [];
-  state.mediaRecorder = new MediaRecorder(state.mediaStream, { mimeType: mime });
-
-  state.mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) state.audioChunks.push(e.data);
+  state.pcmChunks = [];
+  state.workletNode = new AudioWorkletNode(state.audioContext, 'pcm-recorder');
+  state.workletNode.port.onmessage = (e) => {
+    state.pcmChunks.push(e.data);
   };
-
-  state.mediaRecorder.onstop = onRecordingStopped;
-
-  // Timeslice: recibir datos cada 1s → permite preview periódica
-  state.mediaRecorder.start(1000);
+  source.connect(state.workletNode);
 
   state.startTime = Date.now();
   state.lastPreviewText = '';
@@ -191,22 +199,9 @@ async function startRecording() {
 
   setupWaveform();
   state.timerInterval = setInterval(updateTimer, 250);
-  state.previewInterval = setInterval(requestPreview, 12000); // cada 12s
+  state.previewInterval = setInterval(requestPreview, 12000);
 
   showScreen('recording');
-}
-
-function pickMime() {
-  const candidates = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus',
-  ];
-  for (const c of candidates) {
-    if (MediaRecorder.isTypeSupported(c)) return c;
-  }
-  return '';
 }
 
 function setupWaveform() {
@@ -239,10 +234,10 @@ function updateTimer() {
   $('rec-time').textContent = `${mm}:${ss}`;
 }
 
-async function requestPreview() {
+function requestPreview() {
   if (state.previewBusy) return;
-  if (state.audioChunks.length === 0) return;
-  // Evitar previews pesadas en grabaciones muy largas (>15 min)
+  if (!state.pcmChunks || state.pcmChunks.length === 0) return;
+
   const elapsedMin = (Date.now() - state.startTime) / 60000;
   if (elapsedMin > 15) {
     $('preview-text').textContent = 'Grabación larga en curso. La transcripción completa se mostrará al finalizar.';
@@ -254,21 +249,14 @@ async function requestPreview() {
   $('preview-working').style.display = 'inline-block';
   $('preview-working-text').style.display = 'inline';
 
-  try {
-    const audioData = await blobChunksToFloat32(state.audioChunks);
-    if (audioData && audioData.length > 16000) { // al menos 1s
-      state.worker.postMessage({
-        type: 'transcribe',
-        audio: audioData,
-        isPreview: true,
-      }, [audioData.buffer]);
-    } else {
-      state.previewBusy = false;
-      $('preview-working').style.display = 'none';
-      $('preview-working-text').style.display = 'none';
-    }
-  } catch (err) {
-    console.warn('Preview error:', err);
+  const audioData = buildPcmFloat32(state.pcmChunks, state.audioContext.sampleRate);
+  if (audioData && audioData.length > 16000) {
+    state.worker.postMessage({
+      type: 'transcribe',
+      audio: audioData,
+      isPreview: true,
+    }, [audioData.buffer]);
+  } else {
     state.previewBusy = false;
     $('preview-working').style.display = 'none';
     $('preview-working-text').style.display = 'none';
@@ -276,18 +264,18 @@ async function requestPreview() {
 }
 
 function stopRecording() {
-  if (!state.mediaRecorder) return;
+  if (!state.workletNode) return;
   clearInterval(state.timerInterval);
   clearInterval(state.waveformInterval);
   clearInterval(state.previewInterval);
   state.finalDuration = Math.floor((Date.now() - state.startTime) / 1000);
-  try {
-    state.mediaRecorder.stop();
-  } catch {}
+  try { state.workletNode.disconnect(); } catch {}
+  try { state.workletNode.port.close(); } catch {}
+  state.workletNode = null;
+  onRecordingStopped();
 }
 
-async function onRecordingStopped() {
-  // Liberar micrófono
+function onRecordingStopped() {
   if (state.mediaStream) {
     state.mediaStream.getTracks().forEach(t => t.stop());
   }
@@ -296,7 +284,7 @@ async function onRecordingStopped() {
   $('processing-detail').textContent = 'Esto puede tardar un rato. Déjalo que termine.';
 
   try {
-    const audioData = await blobChunksToFloat32(state.audioChunks);
+    const audioData = buildPcmFloat32(state.pcmChunks, state.audioContext.sampleRate);
     if (!audioData || audioData.length < 16000) {
       showError('La grabación es demasiado corta. Inténtalo de nuevo.');
       showScreen('idle');
@@ -308,7 +296,7 @@ async function onRecordingStopped() {
       isPreview: false,
     }, [audioData.buffer]);
   } catch (err) {
-    console.error('Decode error:', err);
+    console.error('PCM build error:', err);
     showError('No se pudo procesar el audio grabado.');
     showScreen('idle');
   }
@@ -352,40 +340,22 @@ function displayResult() {
 }
 
 // =============================================================
-// Decodificación de audio: Blob(WebM) → Float32Array a 16kHz mono
+// Concatenado de chunks PCM → Float32Array mono a 16 kHz
 // =============================================================
-async function blobChunksToFloat32(chunks) {
-  const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
-  const arrayBuffer = await blob.arrayBuffer();
-  const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
-  let audioBuffer;
-  try {
-    audioBuffer = await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
-  } finally {
-    tmpCtx.close();
+function buildPcmFloat32(chunks, sourceRate) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  if (total === 0) return null;
+
+  const pcm = new Float32Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    pcm.set(c, offset);
+    offset += c.length;
   }
 
-  // Mono
-  const channel = audioBuffer.numberOfChannels > 1
-    ? mixToMono(audioBuffer)
-    : audioBuffer.getChannelData(0);
-
-  // Resample a 16000 Hz si hace falta
-  const targetRate = 16000;
-  if (audioBuffer.sampleRate === targetRate) return new Float32Array(channel);
-
-  return resampleLinear(channel, audioBuffer.sampleRate, targetRate);
-}
-
-function mixToMono(buffer) {
-  const len = buffer.length;
-  const out = new Float32Array(len);
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    const data = buffer.getChannelData(ch);
-    for (let i = 0; i < len; i++) out[i] += data[i];
-  }
-  for (let i = 0; i < len; i++) out[i] /= buffer.numberOfChannels;
-  return out;
+  if (sourceRate === 16000) return pcm;
+  return resampleLinear(pcm, sourceRate, 16000);
 }
 
 function resampleLinear(input, srcRate, dstRate) {

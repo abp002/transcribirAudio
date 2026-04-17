@@ -481,6 +481,24 @@
 
     select:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .btn-install {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s ease;
+    }
+    .btn-install:hover { background: var(--accent-hover); }
+    .btn-install svg { width: 14px; height: 14px; }
+
     /* ===== Toast ===== */
     .toast {
       position: fixed;
@@ -613,13 +631,17 @@
 
   <footer>
     <div class="model-selector">
-      <label for="model-select">Calidad:</label>
+      <label for="model-select">Modelo:</label>
       <select id="model-select">
         <option value="Xenova/whisper-base">Rápido (base · 150 MB)</option>
         <option value="Xenova/whisper-small" selected>Equilibrado (small · 500 MB)</option>
         <option value="Xenova/whisper-medium">Máxima (medium · 1.5 GB)</option>
       </select>
     </div>
+    <button id="btn-install" class="btn-install" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+      Instalar
+    </button>
   </footer>
 
   <div id="toast" class="toast">Copiado</div>

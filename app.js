@@ -480,5 +480,23 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Prompt de instalación PWA
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  $('btn-install').style.display = 'inline-flex';
+});
+$('btn-install').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  if (outcome === 'accepted') $('btn-install').style.display = 'none';
+});
+window.addEventListener('appinstalled', () => {
+  $('btn-install').style.display = 'none';
+});
+
 // Arranque
 initWorker();

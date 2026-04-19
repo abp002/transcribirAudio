@@ -56,28 +56,53 @@ def _resolve_diarize_api(wx):
 
 
 def _instantiate_diarize_pipeline(DP, token: str, device: str):
-    """Construye DiarizationPipeline tolerando renombres de parámetros
-    (use_auth_token → token en whisperX 3.8+) usando inspect."""
+    """Construye DiarizationPipeline tolerante a:
+      1. Renombres de parámetro (use_auth_token → token en whisperX 3.8+).
+      2. Modelo por defecto gated (community-1 en 3.8+); si falla por 403,
+         cae a pyannote/speaker-diarization-3.1 que es el que la mayoría
+         de usuarios acepta primero."""
     try:
         sig = inspect.signature(DP.__init__)
         params = sig.parameters
     except (TypeError, ValueError):
         params = {}
 
-    kwargs = {}
+    token_kw = None
     for name in ("token", "use_auth_token", "hf_token", "auth_token"):
         if name in params:
-            kwargs[name] = token
+            token_kw = name
             break
-    if "device" in params:
-        kwargs["device"] = device
-    if not kwargs:
-        # Firma desconocida: probamos ambos como último recurso
+
+    def build(model_name):
+        kwargs = {}
+        if token_kw:
+            kwargs[token_kw] = token
+        if "device" in params:
+            kwargs["device"] = device
+        if model_name is not None and "model_name" in params:
+            kwargs["model_name"] = model_name
+        return DP(**kwargs)
+
+    # Fuerza override si el usuario lo pide por env
+    force = os.environ.get("VOZ_DIARIZE_MODEL", "").strip()
+    candidates = [force] if force else [None, "pyannote/speaker-diarization-3.1"]
+
+    last_err = None
+    for candidate in candidates:
         try:
-            return DP(token=token, device=device)
-        except TypeError:
-            return DP(use_auth_token=token, device=device)
-    return DP(**kwargs)
+            pipe = build(candidate)
+            used = candidate or "(default whisperX: community-1)"
+            print(f"[Voz] Diarización usando modelo: {used}")
+            return pipe
+        except Exception as e:
+            last_err = e
+            msg = str(e)
+            if "restricted" in msg or "gated" in msg or "403" in msg or "401" in msg:
+                print(f"[Voz]   {candidate or 'modelo por defecto'} no accesible, probando fallback...")
+                continue
+            # Error no relacionado con licencia → no seguimos probando
+            raise
+    raise last_err or RuntimeError("No se pudo cargar ningún modelo de diarización")
 
 
 def _ensure_loaded() -> None:

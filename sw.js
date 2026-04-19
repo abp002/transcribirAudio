@@ -3,7 +3,7 @@
 // El modelo Whisper se cachea automáticamente por Transformers.js
 // =============================================================
 
-const CACHE_NAME = 'voz-v4';
+const CACHE_NAME = 'voz-v5';
 const SHELL = [
   './',
   './index.html',
@@ -36,15 +36,18 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
 
   // Solo gestionamos recursos del mismo origen (la shell).
-  // El resto (CDN de Transformers.js, modelos de HF) lo maneja el navegador
-  // y Transformers.js ya cachea los modelos en IndexedDB.
   if (url.origin !== self.location.origin) return;
+
+  // NUNCA cachear llamadas al backend (detección + transcripción).
+  // Si el backend local está arrancado, la app debe poder detectarlo
+  // siempre; si cachearámos /api/health=200 o /api/health=404 se
+  // quedaría una respuesta pegada que rompería la UI.
+  if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     caches.match(req).then((cached) => {
       if (cached) return cached;
       return fetch(req).then((res) => {
-        // Cachear dinámicamente respuestas OK
         if (res.ok && req.method === 'GET') {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(req, copy)).catch(() => {});

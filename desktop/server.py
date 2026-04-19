@@ -27,6 +27,7 @@ torch = None
 _whisper_model = None
 _align_cache: dict = {}
 _diarize_model = None
+_assign_word_speakers = None
 
 MODEL_SIZE = os.environ.get("VOZ_MODEL", "small")
 LANG = "es"
@@ -35,8 +36,26 @@ COMPUTE_TYPE = "int8"
 HF_TOKEN = os.environ.get("HF_TOKEN", "").strip()
 
 
+def _resolve_diarize_api(wx):
+    """whisperX movió DiarizationPipeline/assign_word_speakers a wx.diarize en 3.4+,
+    pero versiones viejas lo exportaban en el top-level. Resolvemos ambos."""
+    DP = None
+    ASW = None
+    try:
+        from whisperx.diarize import DiarizationPipeline as _DP
+        DP = _DP
+    except Exception:
+        DP = getattr(wx, "DiarizationPipeline", None)
+    try:
+        from whisperx.diarize import assign_word_speakers as _ASW
+        ASW = _ASW
+    except Exception:
+        ASW = getattr(wx, "assign_word_speakers", None)
+    return DP, ASW
+
+
 def _ensure_loaded() -> None:
-    global whisperx, torch, _whisper_model, _diarize_model, DEVICE, COMPUTE_TYPE
+    global whisperx, torch, _whisper_model, _diarize_model, _assign_word_speakers, DEVICE, COMPUTE_TYPE
     if whisperx is not None:
         return
     import whisperx as _wx
@@ -50,16 +69,18 @@ def _ensure_loaded() -> None:
     _whisper_model = whisperx.load_model(
         MODEL_SIZE, DEVICE, compute_type=COMPUTE_TYPE, language=LANG
     )
-    if HF_TOKEN:
+    DP, ASW = _resolve_diarize_api(whisperx)
+    _assign_word_speakers = ASW
+    if HF_TOKEN and DP is not None:
         try:
             print("[Voz] Cargando pipeline de diarización (pyannote)...")
-            _diarize_model = whisperx.DiarizationPipeline(
-                use_auth_token=HF_TOKEN, device=DEVICE
-            )
+            _diarize_model = DP(use_auth_token=HF_TOKEN, device=DEVICE)
         except Exception as e:
             print(f"[Voz] Diarización no disponible: {e}")
-    else:
+    elif not HF_TOKEN:
         print("[Voz] HF_TOKEN no configurado → sin diarización.")
+    else:
+        print("[Voz] whisperX no expone DiarizationPipeline en esta versión.")
     print("[Voz] Listo.")
 
 
@@ -109,10 +130,10 @@ async def transcribe(audio: UploadFile = File(...)):
                 print(f"[Voz] Alineado falló: {e}")
 
         # Diarización
-        if _diarize_model is not None:
+        if _diarize_model is not None and _assign_word_speakers is not None:
             try:
                 diarize_segments = _diarize_model(data)
-                result = whisperx.assign_word_speakers(diarize_segments, result)
+                result = _assign_word_speakers(diarize_segments, result)
             except Exception as e:
                 print(f"[Voz] Diarización falló: {e}")
 

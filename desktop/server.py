@@ -13,6 +13,7 @@ exportado como HF_TOKEN (ver README.md).
 from __future__ import annotations
 
 import gc
+import inspect
 import os
 import tempfile
 from pathlib import Path
@@ -54,6 +55,31 @@ def _resolve_diarize_api(wx):
     return DP, ASW
 
 
+def _instantiate_diarize_pipeline(DP, token: str, device: str):
+    """Construye DiarizationPipeline tolerando renombres de parámetros
+    (use_auth_token → token en whisperX 3.8+) usando inspect."""
+    try:
+        sig = inspect.signature(DP.__init__)
+        params = sig.parameters
+    except (TypeError, ValueError):
+        params = {}
+
+    kwargs = {}
+    for name in ("token", "use_auth_token", "hf_token", "auth_token"):
+        if name in params:
+            kwargs[name] = token
+            break
+    if "device" in params:
+        kwargs["device"] = device
+    if not kwargs:
+        # Firma desconocida: probamos ambos como último recurso
+        try:
+            return DP(token=token, device=device)
+        except TypeError:
+            return DP(use_auth_token=token, device=device)
+    return DP(**kwargs)
+
+
 def _ensure_loaded() -> None:
     global whisperx, torch, _whisper_model, _diarize_model, _assign_word_speakers, DEVICE, COMPUTE_TYPE
     if whisperx is not None:
@@ -74,7 +100,7 @@ def _ensure_loaded() -> None:
     if HF_TOKEN and DP is not None:
         try:
             print("[Voz] Cargando pipeline de diarización (pyannote)...")
-            _diarize_model = DP(use_auth_token=HF_TOKEN, device=DEVICE)
+            _diarize_model = _instantiate_diarize_pipeline(DP, HF_TOKEN, DEVICE)
         except Exception as e:
             print(f"[Voz] Diarización no disponible: {e}")
     elif not HF_TOKEN:

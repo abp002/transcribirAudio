@@ -4,6 +4,7 @@
 
 const state = {
   backend: null,
+  backendBaseUrl: '',
   mediaStream: null,
   workletNode: null,
   pcmChunks: [],
@@ -53,24 +54,60 @@ function showToast(text) {
 // =============================================================
 // Detección del backend
 // =============================================================
-async function detectBackend() {
+function normalizeBackendUrl(url) {
+  let u = (url || '').trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  return u.replace(/\/+$/, '');
+}
+
+function apiUrl(path) {
+  const base = state.backendBaseUrl || '';
+  return base + path;
+}
+
+async function tryHealth(baseUrl) {
   try {
     const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 2000);
-    const r = await fetch('/api/health', { signal: ctrl.signal });
+    const timeout = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch((baseUrl || '') + '/api/health', { signal: ctrl.signal });
     clearTimeout(timeout);
     if (r.ok) return await r.json();
   } catch {}
   return null;
 }
 
+async function detectBackend() {
+  // 1. Mismo origen (servidor Python sirve la PWA directamente).
+  let info = await tryHealth('');
+  if (info) return { base: '', info };
+
+  // 2. URL guardada por el usuario (PWA en github.io con tunnel externo).
+  const stored = localStorage.getItem('voz.backendUrl');
+  if (stored) {
+    info = await tryHealth(stored);
+    if (info) return { base: stored, info };
+  }
+
+  return null;
+}
+
 async function initApp() {
   showScreen('connecting');
-  state.backend = await detectBackend();
-  if (!state.backend) {
+  const found = await detectBackend();
+  if (!found) {
+    const stored = localStorage.getItem('voz.backendUrl') || '';
+    $('backend-url-input').value = stored;
+    if (stored) {
+      $('backend-url-hint').textContent = 'La última URL que usaste no responde. Pégala de nuevo o introduce la nueva.';
+    } else {
+      $('backend-url-hint').textContent = 'Pega aquí la URL del servidor que te ha facilitado tu administrador.';
+    }
     showScreen('noBackend');
     return;
   }
+  state.backend = found.info;
+  state.backendBaseUrl = found.base;
   showBackendBadge(state.backend);
   showScreen('idle');
 }
@@ -81,6 +118,26 @@ function showBackendBadge(info) {
   const diar = info.diarization ? ' · diarización' : ' · sin diarización';
   el.textContent = `${info.device} · ${info.model}${diar}`;
   el.style.display = 'inline-block';
+}
+
+async function saveBackendUrl() {
+  const raw = $('backend-url-input').value;
+  const url = normalizeBackendUrl(raw);
+  if (!url) {
+    $('backend-url-hint').textContent = 'Introduce una URL válida.';
+    return;
+  }
+  $('backend-url-hint').textContent = 'Comprobando…';
+  const info = await tryHealth(url);
+  if (!info) {
+    $('backend-url-hint').textContent = 'No se pudo conectar con esa URL. Revisa que el servidor está encendido y la URL es correcta.';
+    return;
+  }
+  localStorage.setItem('voz.backendUrl', url);
+  state.backend = info;
+  state.backendBaseUrl = url;
+  showBackendBadge(state.backend);
+  showScreen('idle');
 }
 
 // =============================================================
@@ -196,7 +253,7 @@ async function transcribeWithBackend(pcm) {
   const fd = new FormData();
   fd.append('audio', new Blob([wav], { type: 'audio/wav' }), 'recording.wav');
   try {
-    const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+    const r = await fetch(apiUrl('/api/transcribe'), { method: 'POST', body: fd });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     state.finalSegments = data.segments || [];
@@ -395,7 +452,10 @@ $('btn-new').addEventListener('click', () => {
   showScreen('idle');
 });
 
-$('btn-retry-backend')?.addEventListener('click', () => initApp());
+$('btn-save-backend-url')?.addEventListener('click', saveBackendUrl);
+$('backend-url-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') saveBackendUrl();
+});
 
 // Atajo: Espacio para grabar/parar
 document.addEventListener('keydown', (e) => {

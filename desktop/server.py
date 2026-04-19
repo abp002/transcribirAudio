@@ -19,6 +19,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -136,6 +137,15 @@ def _ensure_loaded() -> None:
 
 
 app = FastAPI(title="Voz Desktop")
+
+# CORS: permite que la PWA hospedada en github.io (u otro origen)
+# hable con este backend. No usamos cookies, allow_origins="*" es OK.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/api/health")

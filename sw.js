@@ -3,7 +3,7 @@
 // El modelo Whisper se cachea automáticamente por Transformers.js
 // =============================================================
 
-const CACHE_NAME = 'voz-v6';
+const CACHE_NAME = 'voz-v7';
 const SHELL = [
   './',
   './index.html',

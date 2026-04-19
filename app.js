@@ -25,6 +25,8 @@ const state = {
   finalSegments: null,
   finalStats: null,
   finalDuration: 0,
+  speakerNames: new Map(),       // speaker_id (SPEAKER_00) → nombre custom
+  speakerPalette: new Map(),     // speaker_id → { name: 'Hablante 1', color: '#xxx' }
 };
 
 // ---- Referencias DOM ----
@@ -343,11 +345,8 @@ async function transcribeWithBackend(pcm) {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     state.finalSegments = data.segments || [];
-    state.finalText = state.finalSegments
-      .map(s => `[${s.speaker}]\n${s.text}`)
-      .join('\n\n');
     state.finalStats = null;
-    displayResult();
+    displayResult(); // rebuildFinalText() dentro setea state.finalText
   } catch (err) {
     console.error('Backend error:', err);
     showError(`Fallo en el servidor local: ${err.message}`);
@@ -406,35 +405,81 @@ function onTranscription(msg) {
   }
 }
 
-function displayResult() {
+function buildSpeakerPalette() {
+  const palette = ['#01896c', '#c14d2b', '#2d6fa6', '#8b4a9c', '#b87333', '#4a8a5a', '#a83e6f', '#5a6c7a'];
+  state.speakerPalette = new Map();
+  state.finalSegments.forEach(seg => {
+    if (!state.speakerPalette.has(seg.speaker)) {
+      const idx = state.speakerPalette.size;
+      state.speakerPalette.set(seg.speaker, {
+        name: `Hablante ${idx + 1}`,
+        color: palette[idx % palette.length],
+      });
+    }
+  });
+}
+
+function speakerDisplayName(spk) {
+  const custom = state.speakerNames.get(spk);
+  if (custom) return custom;
+  const info = state.speakerPalette.get(spk);
+  return info ? info.name : spk;
+}
+
+function renderSpeakerSegments() {
   const box = $('result-text');
   box.innerHTML = '';
-  if (state.finalSegments && state.finalSegments.length > 0) {
-    const palette = ['#01896c', '#c14d2b', '#2d6fa6', '#8b4a9c', '#b87333', '#4a8a5a', '#a83e6f', '#5a6c7a'];
-    const speakerMap = new Map();
-    state.finalSegments.forEach(seg => {
-      if (!speakerMap.has(seg.speaker)) {
-        speakerMap.set(seg.speaker, {
-          name: `Hablante ${speakerMap.size + 1}`,
-          color: palette[speakerMap.size % palette.length],
-        });
+  state.finalSegments.forEach(seg => {
+    const info = state.speakerPalette.get(seg.speaker);
+    const block = document.createElement('div');
+    block.className = 'segment';
+
+    const label = document.createElement('div');
+    label.className = 'segment-speaker';
+    label.textContent = speakerDisplayName(seg.speaker);
+    label.style.color = info.color;
+    label.style.cursor = 'pointer';
+    label.title = 'Clic para renombrar este hablante';
+    label.addEventListener('click', () => {
+      const current = speakerDisplayName(seg.speaker);
+      const input = window.prompt('¿Cómo se llama este hablante?', current);
+      if (input !== null) {
+        const trimmed = input.trim();
+        if (trimmed) {
+          state.speakerNames.set(seg.speaker, trimmed);
+        } else {
+          state.speakerNames.delete(seg.speaker);
+        }
+        renderSpeakerSegments();
+        rebuildFinalText();
       }
-      const info = speakerMap.get(seg.speaker);
-      const block = document.createElement('div');
-      block.className = 'segment';
-      const label = document.createElement('div');
-      label.className = 'segment-speaker';
-      label.textContent = info.name;
-      label.style.color = info.color;
-      const text = document.createElement('div');
-      text.className = 'segment-text';
-      text.textContent = seg.text;
-      block.appendChild(label);
-      block.appendChild(text);
-      box.appendChild(block);
     });
+
+    const text = document.createElement('div');
+    text.className = 'segment-text';
+    text.textContent = seg.text;
+
+    block.appendChild(label);
+    block.appendChild(text);
+    box.appendChild(block);
+  });
+}
+
+function rebuildFinalText() {
+  if (!state.finalSegments || state.finalSegments.length === 0) return;
+  state.finalText = state.finalSegments
+    .map(s => `[${speakerDisplayName(s.speaker)}]\n${s.text}`)
+    .join('\n\n');
+}
+
+function displayResult() {
+  if (state.finalSegments && state.finalSegments.length > 0) {
+    state.speakerNames = new Map(); // reset renames en cada grabación
+    buildSpeakerPalette();
+    rebuildFinalText();
+    renderSpeakerSegments();
   } else {
-    box.textContent = state.finalText || '(Sin texto transcrito)';
+    $('result-text').textContent = state.finalText || '(Sin texto transcrito)';
   }
 
   const mm = String(Math.floor(state.finalDuration / 60)).padStart(2, '0');

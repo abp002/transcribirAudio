@@ -436,7 +436,26 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
       margin-bottom: 4px;
+      position: relative;
+      display: inline-block;
+      padding-right: 18px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
     }
+    .segment-speaker::after {
+      content: '✎';
+      position: absolute;
+      right: 2px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+    .segment-speaker:hover {
+      background: var(--accent-soft);
+    }
+    .segment-speaker:hover::after { opacity: 0.6; }
     .segment-text { color: var(--ink); }
 
     .result-actions {

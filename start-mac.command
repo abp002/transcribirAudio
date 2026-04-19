@@ -1,5 +1,5 @@
 #!/bin/bash
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/desktop"
 set -e
 
 # whisperX pin ctranslate2==4.4.0 que solo tiene wheels para Python 3.10-3.12.

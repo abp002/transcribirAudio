@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0"
+cd /d "%~dp0\desktop"
 
 REM whisperX requiere Python 3.10-3.12 (ctranslate2 4.4.0 no tiene wheels para 3.13+).
 set PYEXE=

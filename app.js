@@ -6,6 +6,7 @@ const state = {
   backend: null,
   backendBaseUrl: '',
   mediaStream: null,
+  tabStream: null,
   workletNode: null,
   pcmChunks: [],
   audioContext: null,
@@ -147,6 +148,7 @@ async function startRecording() {
   if (!state.backend) return;
   clearError();
 
+  // 1. Micrófono (obligatorio)
   try {
     state.mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -161,6 +163,24 @@ async function startRecording() {
     return;
   }
 
+  // 2. Audio del sistema / pestaña (opcional, para llamadas online)
+  state.tabStream = null;
+  try {
+    const ds = await navigator.mediaDevices.getDisplayMedia({
+      audio: true,
+      video: true, // Chrome exige video:true aunque no lo usemos
+    });
+    ds.getVideoTracks().forEach(t => t.stop());
+    if (ds.getAudioTracks().length > 0) {
+      state.tabStream = ds;
+    } else {
+      ds.getTracks().forEach(t => t.stop());
+    }
+  } catch {
+    // Usuario canceló el diálogo de compartir → seguimos solo con micro
+  }
+
+  // 3. AudioContext a 16 kHz
   try {
     state.audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
   } catch {
@@ -173,20 +193,34 @@ async function startRecording() {
     console.error('AudioWorklet load failed:', err);
     showError('Tu navegador no soporta la captura de audio necesaria. Usa Chrome o Edge actualizados.');
     state.mediaStream.getTracks().forEach(t => t.stop());
+    if (state.tabStream) state.tabStream.getTracks().forEach(t => t.stop());
     return;
   }
 
-  const source = state.audioContext.createMediaStreamSource(state.mediaStream);
+  // 4. Mezcla mic + tab (si hay) en un único nodo
+  const micSource = state.audioContext.createMediaStreamSource(state.mediaStream);
+  const mixer = state.audioContext.createGain();
+  micSource.connect(mixer);
+  if (state.tabStream) {
+    const tabSource = state.audioContext.createMediaStreamSource(state.tabStream);
+    tabSource.connect(mixer);
+  }
+
   state.analyser = state.audioContext.createAnalyser();
   state.analyser.fftSize = 64;
-  source.connect(state.analyser);
+  mixer.connect(state.analyser);
 
   state.pcmChunks = [];
   state.workletNode = new AudioWorkletNode(state.audioContext, 'pcm-recorder');
   state.workletNode.port.onmessage = (e) => {
     state.pcmChunks.push(e.data);
   };
-  source.connect(state.workletNode);
+  mixer.connect(state.workletNode);
+
+  // UI: qué se está grabando
+  $('rec-status').textContent = state.tabStream
+    ? 'Grabando micrófono + audio del equipo'
+    : 'Grabando micrófono';
 
   state.startTime = Date.now();
   $('rec-time').textContent = '00:00';
@@ -234,6 +268,10 @@ function stopRecording() {
   state.workletNode = null;
   if (state.mediaStream) {
     state.mediaStream.getTracks().forEach(t => t.stop());
+  }
+  if (state.tabStream) {
+    state.tabStream.getTracks().forEach(t => t.stop());
+    state.tabStream = null;
   }
 
   showScreen('processing');
